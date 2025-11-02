@@ -9,19 +9,21 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/example/ecommerce-api/internal/api"
-	"github.com/gofiber/contrib/swagger"
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/recover"
+	"{{.Module}}/internal/api"
+	"{{.Module}}/internal/middleware"
+	"{{.Module}}/internal/pkg/config"
+	"{{.Module}}/internal/pkg/logger"
+	"{{.Module}}/internal/pkg/types"
 
-	_ "github.com/example/ecommerce-api/docs" // swagger docs
+	// "{{.Module}}/docs"
+	// _ "{{.Module}}/docs" // swagger docs
+
+	"github.com/gofiber/fiber/v2"
 )
 
-//	@title			E-commerce API
+//	@title			my-api API
 //	@version		1.0
-//	@description	A sample e-commerce API built with Go, Fiber, and Wire
+//	@description	A Go API built with Fiber and Wire
 //	@description	Generated using taskw - Go API Code Generator
 //	@termsOfService	http://swagger.io/terms/
 
@@ -40,97 +42,140 @@ import (
 //	@externalDocs.url			https://swagger.io/resources/open-api/
 
 func main() {
-	fmt.Println("🚀 Starting E-commerce API...")
-	fmt.Println("📋 This example requires taskw to generate routes and dependencies")
-	fmt.Println("")
+	fmt.Println("Starting hello-taskw API...")
+	fmt.Println("This project requires taskw to generate routes and dependencies")
 
-	// Initialize the server using Wire (which uses taskw-generated providers)
-	router, err := api.InitializeRouter()
+	// Get environment info
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "dev"
+	}
+	fmt.Printf("Environment: %s\n", env)
 
-	if err != nil {
-		log.Fatalf("❌ Failed to initialize server: %v\n\n💡 Did you run 'taskw generate' to create the required code?", err)
+	// Get config info
+	cfg := config.GetConfig()
+	if cfg != nil {
+		fmt.Printf("App: %s v%s\n", cfg.App.Name, cfg.App.Version)
+		fmt.Printf("Database: %s\n", cfg.DB.Driver)
+		fmt.Printf("Debug mode: %t\n", cfg.App.Debug)
+		fmt.Printf("Log level: %s\n", cfg.App.LogLevel)
 	}
 
-	// Initialize Fiber app
-	app := api.ProvideFiberApp()
+	// Use Wire-generated dependency injection container
+	fmt.Println("Initializing dependency injection container...")
+	router, err := api.InitializeRouter()
+	if err != nil {
+		log.Fatalf("❌ Failed to initialize server: %v\n\nDid you run 'taskw generate' to create the required code?", err)
+	}
 
 	fmt.Println("✅ Server initialized successfully (taskw-generated code is working!)")
 
+	// Get app instance from router
+	app := router.GetApp()
+	fmt.Println("Fiber app instance obtained")
+
 	// Setup middleware
-	setupMiddleware(app)
+	fmt.Println("Setting up middleware...")
+	setupMiddleware(app, router)
+	fmt.Println("✅ Middleware setup completed")
 
 	// Setup routes (this will use taskw-generated route registration)
+	fmt.Println("Setting up routes...")
 	setupRoutes(app, router)
+	fmt.Println("✅ Routes setup completed")
 
 	// Start server with graceful shutdown
-	startServer(app)
+	startServer(app, router)
 }
 
-func setupMiddleware(app *fiber.App) {
-	// CORS middleware
-	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, DELETE, OPTIONS",
-	}))
+// setupMiddleware configures global middleware
+func setupMiddleware(app *fiber.App, _ *api.Router) {
+	fmt.Println("  Adding Recovery middleware...")
+	app.Use(middleware.RecoveryMiddleware())
 
-	// Logger middleware
-	app.Use(logger.New(logger.Config{
-		Format: "[${time}] ${status} - ${method} ${path} - ${latency}\n",
-	}))
+	fmt.Println("  Adding CORS middleware...")
+	app.Use(middleware.CORS())
 
-	// Recover middleware
-	app.Use(recover.New())
+	// core middleware
+	fmt.Println("  Adding Trace middleware...")
+	app.Use(middleware.TraceMiddleware()) // trace_id
+
+	fmt.Println("  Adding Response middleware...")
+	app.Use(middleware.ResponseMiddleware()) // unified JSON response
+
+	fmt.Println("  Adding Validator middleware...")
+	app.Use(middleware.ValidatorMiddleware()) // request validation
+
+	fmt.Println("  Creating development logger...")
+	devLogger := logger.NewDevelopmentLogger()
+	fmt.Println("  Adding Logger middleware...")
+	app.Use(middleware.LoggerMiddleware(devLogger))
 }
 
+// setupRoutes registers routes and Swagger documentation
 func setupRoutes(app *fiber.App, router *api.Router) {
-	cfg := swagger.Config{
-		BasePath: "",
-		FilePath: "./docs/swagger.json",
-		Path:     "docs",
-		Title:    "Swagger API Docs",
-	}
 
-	app.Use(swagger.New(cfg))
-
-	// Health check endpoint is now generated via taskw from health module
+	// Scalar documentation
+	scalarConfig := middleware.DefaultScalarConfig()
+	scalarConfig.Title = "my-api API Documentation"
+	scalarConfig.Description = "A Go API built with Fiber and Wire - Generated using taskw"
+	scalarConfig.Version = "1.0"
+	middleware.SetupScalarRoutes(app, scalarConfig)
 
 	// API routes - this uses taskw-generated route registration
-	fmt.Println("📡 Registering API routes (generated by taskw)...")
+	fmt.Println("Registering API routes (generated by taskw)...")
 	router.RegisterHandlers()
+
+	// // Print all registered routes
+	// fmt.Println("Registered routes:")
+	// routes := app.GetRoutes(false)
+	// apiRoutes := 0
+	// for _, route := range routes {
+	// 	if route.Path != "/" && route.Path != "/health" {
+	// 		fmt.Printf("  %s %s\n", route.Method, route.Path)
+	// 		apiRoutes++
+	// 	}
+	// }
+	// fmt.Printf("Total API routes registered: %d\n", apiRoutes)
 
 	// 404 handler
 	app.Use(func(c *fiber.Ctx) error {
-		return c.Status(404).JSON(fiber.Map{
-			"error":   "Not Found",
-			"message": fmt.Sprintf("Route '%s' not found", c.Path()),
-			"note":    "Available routes were generated by taskw",
-		})
+		response := types.Response{
+			Code: 1,
+			Msg:  fmt.Sprintf("Route '%s' not found", c.Path()),
+			Data: nil,
+		}
+		return c.JSON(response)
 	})
-
 }
 
-func startServer(app *fiber.App) {
+// startServer starts HTTP service
+func startServer(app *fiber.App, _ *api.Router) {
 	// Channel to listen for interrupt signal
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
 	// Start server in a goroutine
 	go func() {
-		port := os.Getenv("PORT")
-		if port == "" {
-			port = "3000"
+		// get port from config, prioritize environment variable
+		port := "3000"
+		if envPort := os.Getenv("PORT"); envPort != "" {
+			port = envPort
+		} else {
+			// get port from config singleton
+			cfg := config.GetConfig()
+			if cfg != nil && cfg.Server.Port > 0 {
+				port = fmt.Sprintf("%d", cfg.Server.Port)
+			}
 		}
 
-		fmt.Printf("🌐 Server starting on port %s\n", port)
-		fmt.Println("📖 API Documentation:")
-		fmt.Printf("   Swagger: http://localhost:%s/docs\n", port)
+		fmt.Printf("Server starting on port %s\n", port)
+		fmt.Printf("API Documentation:\n")
+		fmt.Printf("   Scalar:  http://localhost:%s/docs\n", port)
 		fmt.Printf("   Health:  http://localhost:%s/health\n", port)
-		fmt.Printf("   Users:   http://localhost:%s/api/v1/users\n", port)
-		fmt.Printf("   Products: http://localhost:%s/api/v1/products\n", port)
-		fmt.Printf("   Orders:  http://localhost:%s/api/v1/orders\n", port)
+		fmt.Printf("   API Base: http://localhost:%s/api/\n", port)
 		fmt.Println("")
-		fmt.Println("🧪 Test the API with the examples in README.md")
+		fmt.Println("✅ Ready to accept requests!")
 		fmt.Println("")
 
 		if err := app.Listen(":" + port); err != nil {
@@ -140,8 +185,8 @@ func startServer(app *fiber.App) {
 
 	// Wait for interrupt signal
 	<-c
-	fmt.Println("🛑 Received shutdown signal...")
-	fmt.Println("🔄 Gracefully shutting down...")
+	fmt.Println("Received shutdown signal...")
+	fmt.Println("Gracefully shutting down...")
 
 	// Create a deadline for shutdown
 	_, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -1,16 +1,18 @@
 version: '3'
 
 vars:
-  BINARY_NAME: ecommerce-api
+  BINARY_NAME: my-api
   MAIN_PATH: ./cmd/server
   AIR_CONFIG: .air.toml
+  ENV: 'test'
+  CONFIG_FILE: './configs/config.{{.ENV}}.toml'
 
 tasks:
   build:
     desc: Build the server binary
     deps: [generate]
     cmds:
-      - go build -o bin/{{.BINARY_NAME}} {{.MAIN_PATH}}
+      - go build -o bin/{{ .BINARY_NAME }} {{ .MAIN_PATH }}
 
   test:
     desc: Run tests
@@ -18,17 +20,53 @@ tasks:
     cmds:
       - go test -v ./...
 
+  fix:
+    desc: Run fix
+    deps: []
+    cmds:
+      - golangci-lint run --fix ./...
+
   dev:
-    desc: Run development server with live reloading using air
+    desc: Run development server with live reloading using air 
+    vars:
+      ENV: 'dev'
     deps: [generate, install-air]
     cmds:
-      - air -c {{.AIR_CONFIG}}
+      - ENV={{.ENV}} air -c {{ .AIR_CONFIG }}
+
+  test:
+    desc: Run test environment
+    vars:
+      ENV: 'test'
+    deps: [generate]
+    cmds:
+      - ENV={{.ENV}} go run {{.MAIN_PATH}}
+
+  staging:
+    desc: Run staging environment
+    vars:
+      ENV: 'staging'
+    deps: [generate]
+    cmds:
+      - ENV={{.ENV}} go run {{.MAIN_PATH}}
+
+  prod:
+    desc: Run production environment
+    vars:
+      ENV: 'prod'
+    deps: [generate]
+    cmds:
+      - ENV={{.ENV}} go run {{.MAIN_PATH}}
 
   generate:
     desc: Generate code using taskw (includes swagger) and wire
     cmds:
-      - ../bin/taskw generate all
+      - go generate ./ent
+      - go run cmd/generate/ent_generator.go fiber-wire-ent
+      - taskw generate all
       - wire ./internal/api
+      - go fmt ./...
+      - golangci-lint run ./...
 
   swagger:
     desc: Generate Swagger documentation
@@ -57,7 +95,7 @@ tasks:
   clean:
     desc: Clean generated files and binaries
     cmds:
-      - rm -f bin/{{.BINARY_NAME}}
+      - rm -f bin/{{ .BINARY_NAME }}
       - rm -f internal/api/*_gen.go
       - rm -rf docs/
 
@@ -71,4 +109,63 @@ tasks:
     desc: Run the server (production mode)
     deps: [build]
     cmds:
-      - ./bin/{{.BINARY_NAME}}
+      - ./bin/{{ .BINARY_NAME }}
+
+  example:
+    desc: Run high concurrency example
+    cmds:
+      - go run examples/high_concurrency_example.go
+
+  test-concurrency:
+    desc: Test high concurrency features
+    cmds:
+      - go test -v ./internal/pkg/atomic/...
+      - go test -v ./internal/pkg/ratelimit/...
+      - go test -v ./internal/pkg/errors/...
+      - go test -v ./internal/pkg/metrics/...
+
+  benchmark:
+    desc: Run benchmarks for high concurrency packages
+    cmds:
+      - go test -bench=. -benchmem ./internal/pkg/atomic/...
+      - go test -bench=. -benchmem ./internal/pkg/ratelimit/...
+      - go test -bench=. -benchmem ./internal/pkg/errors/...
+
+  metrics:
+    desc: Start metrics server only
+    cmds:
+      - go run -mod=mod cmd/metrics/main.go
+
+  stress-test:
+    desc: Run stress test with high concurrency
+    cmds:
+      - |
+        echo "Starting stress test..."
+        for i in {1..10}; do
+          curl -X POST http://localhost:3000/api/user.list &
+        done
+        wait
+        echo "Stress test completed"
+
+  monitor:
+    desc: Monitor system metrics
+    cmds:
+      - |
+        echo "Monitoring system metrics..."
+        while true; do
+          echo "=== $(date) ==="
+          curl -s http://localhost:9090/metrics | grep -E "(http_requests_total|user_created_total|goroutines_total)"
+          sleep 5
+        done
+
+  new-entity:
+    desc: Create new entity using ent CLI
+    cmds:
+      - |
+        if [ -z "$NAME" ]; then
+          echo "Usage: task new-entity NAME=<entity-name>"
+          echo "Example: task new-entity NAME=User"
+          exit 1
+        fi
+        echo "Creating new entity: $NAME"
+        go run -mod=mod entgo.io/ent/cmd/ent new $NAME

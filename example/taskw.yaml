@@ -1,6 +1,6 @@
 version: "1.0"
 project:
-  module: "github.com/example/ecommerce-api"
+  module: "{{.Module}}"
 paths:
   scan_dirs: ["."]
   output_dir: "./internal/api"

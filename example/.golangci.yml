@@ -1,0 +1,83 @@
+run:
+  timeout: 5m
+  tests: false
+
+linters:
+  fast: true
+  enable:
+    # # --- 核心 bug 检查 ---
+    # - govet          # Go 官方 vet 工具
+    # - staticcheck    # 静态分析，检查 bug 和废弃 API
+    # - errcheck       # 检查未处理的错误
+    # - gosimple       # 代码简化建议
+    # - ineffassign    # 检测无效赋值
+    # - typecheck      # 类型检查
+    # - unused         # 检查未使用的代码
+
+    # # --- 代码质量 & 风格 ---
+    # - gocritic       # 综合代码质量检查
+    # - revive         # 现代风格检查器
+    # - goconst        # 检查重复字符串（只对常量化需求强的项目有价值）
+    # - misspell       # 拼写检查
+    # - nolintlint     # 检查 nolint 指令
+    # - rowserrcheck   # 检查数据库 rows 错误
+    # - unconvert      # 检查不必要的类型转换
+
+    # --- 可选 (根据项目需要开启) ---
+    # - gocyclo      # 圈复杂度检查（容易吵，建议在 code review 抓）
+    # - nakedret     # 裸返回检查（小函数可忍，长函数才需要）
+    # - noctx        # http 请求缺少 context（看项目规范，常报噪音）
+    # - unparam      # 未使用参数（接口常见，很多误报）
+    # - whitespace   # 空白字符（基本可交给 gofumpt 处理）
+
+
+# linters-settings:
+#   revive:
+#     rules:
+#       - name: exported
+#         disabled: true
+#       - name: package-comments
+#         disabled: true
+#       - name: line-length-limit
+#         disabled: true
+#   gocritic:
+#     enabled-tags:
+#       - diagnostic
+#       - experimental
+#       - opinionated
+#       - performance
+#       - style
+#     disabled-checks:
+#       - dupImport
+#       - ifElseChain
+#       - octalLiteral
+#       - whyNoLint
+#       - wrapperFunc
+#       - hugeParam
+#       - paramTypeCombine
+#       - commentedOutCode
+#       - nestingReduce
+#       - singleCaseSwitch
+#       - emptyStringTest
+#   gocyclo:
+#     min-complexity: 15
+#   goconst:
+#     min-len: 3
+#     min-occurrences: 3
+#   nakedret:
+#     max-func-lines: 30
+
+issues:
+  exclude-dirs:
+    - vendor
+    - ent
+    - mock
+  exclude-files:
+    - ".*_gen.go"
+    - ".*_mock.go"
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true

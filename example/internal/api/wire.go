@@ -1,21 +1,29 @@
 //go:build wireinject
+// +build wireinject
 
 package api
 
 import (
+	"{{.Module}}/internal/pkg/config"
+	"{{.Module}}/internal/pkg/logger"
+
 	"github.com/google/wire"
 )
 
-// ProviderSet will be augmented by taskw generated dependencies
-// This only contains infrastructure providers - taskw will add the rest
+// ProviderSet contains infrastructure providers
 var ProviderSet = wire.NewSet(
+	// config
+	config.ProvideConfig,
 
-	// Manual providers (If any)
+	// logger
+	logger.NewDevelopment,
+	logger.NewDevelopmentLogger,
 
-	// Generated providers added by taskw
+	// generated providers
 	GeneratedProviderSet,
 )
 
+// InitializeRouter initializes Router dependencies
 func InitializeRouter() (*Router, error) {
 	wire.Build(ProviderSet)
 	return &Router{}, nil
